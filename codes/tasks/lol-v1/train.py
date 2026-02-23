@@ -12,6 +12,7 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 # from IPython import embed
+import pyiqa
 
 import options as option
 
@@ -119,7 +120,7 @@ def main():
             opt["path"]["log"],
             "train_" + opt["name"],
             level=logging.INFO,
-            screen=False,
+            screen=True,
             tofile=True,
         )
         util.setup_logger(
@@ -127,7 +128,7 @@ def main():
             opt["path"]["log"],
             "val_" + opt["name"],
             level=logging.INFO,
-            screen=False,
+            screen=True,
             tofile=True,
         )
         logger = logging.getLogger("base")
@@ -238,6 +239,35 @@ def main():
     best_psnr = 0.0
     best_iter = 0
     error = mp.Value('b', False)
+    val_epoch_freq = int(opt["train"].get("val_epoch_freq", 0))
+    val_num_preview = int(opt["train"].get("val_num_preview", 0))
+    metric_device = device
+    try:
+        psnr_fn = pyiqa.create_metric("psnr", device=metric_device)
+    except Exception as exc:
+        psnr_fn = None
+        logger.warning("PSNR metric init failed: %s", exc)
+    try:
+        ssim_fn = pyiqa.create_metric("ssim", device=metric_device)
+    except Exception as exc:
+        ssim_fn = None
+        logger.warning("SSIM metric init failed: %s", exc)
+    try:
+        lpips_fn = pyiqa.create_metric("lpips", device=metric_device)
+    except Exception as exc:
+        lpips_fn = None
+        logger.warning("LPIPS metric init failed: %s", exc)
+    try:
+        niqe_fn = pyiqa.create_metric("niqe", device=metric_device)
+    except Exception as exc:
+        niqe_fn = None
+        logger.warning("NIQE metric init failed: %s", exc)
+
+    artifacts_dir = os.path.join(opt["path"]["val_images"], "artifacts")
+    util.mkdir(artifacts_dir)
+
+    def _get_base_model(net):
+        return net.module if isinstance(net, (DataParallel, DistributedDataParallel)) else net
 
     for epoch in range(start_epoch, total_epochs + 1):
         if opt["dist"]:
@@ -319,6 +349,101 @@ def main():
                     logger.info("Saving models and training states.")
                     model.save(current_step)
                     # model.save_training_state(epoch, current_step)
+
+        if val_epoch_freq > 0 and (epoch % val_epoch_freq == 0) and rank <= 0:
+            avg_psnr = 0.0
+            avg_ssim = 0.0
+            avg_lpips = 0.0
+            avg_niqe = 0.0
+            psnr_count = 0
+            ssim_count = 0
+            lpips_count = 0
+            niqe_count = 0
+            idx = 0
+            for i, val_data in enumerate(val_loader):
+                LQ, GT = val_data["LQ"], val_data["GT"]
+                model.feed_data(LQ, LQ, GT)
+                model.test(sde)
+                visuals = model.get_current_visuals()
+
+                output = util.tensor2img(visuals["Output"].squeeze())
+                gt_img = util.tensor2img(visuals["GT"].squeeze())
+                lq_img = util.tensor2img(visuals["Input"].squeeze())
+
+                sr_tensor = visuals["Output"].detach().to(metric_device).clamp(0, 1)
+                gt_tensor = visuals["GT"].detach().to(metric_device).clamp(0, 1)
+
+                sr_tensor = sr_tensor.unsqueeze(0)
+                gt_tensor = gt_tensor.unsqueeze(0)
+
+                if psnr_fn is not None:
+                    try:
+                        avg_psnr += psnr_fn(sr_tensor, gt_tensor).mean().item()
+                        psnr_count += 1
+                    except Exception as exc:
+                        logger.warning("PSNR metric failed on batch: %s", exc)
+                if ssim_fn is not None:
+                    try:
+                        avg_ssim += ssim_fn(sr_tensor, gt_tensor).mean().item()
+                        ssim_count += 1
+                    except Exception as exc:
+                        logger.warning("SSIM metric failed on batch: %s", exc)
+                if lpips_fn is not None:
+                    try:
+                        avg_lpips += lpips_fn(sr_tensor, gt_tensor).mean().item()
+                        lpips_count += 1
+                    except Exception as exc:
+                        logger.warning("LPIPS metric failed on batch: %s", exc)
+                if niqe_fn is not None:
+                    try:
+                        avg_niqe += niqe_fn(sr_tensor).mean().item()
+                        niqe_count += 1
+                    except Exception as exc:
+                        logger.warning("NIQE metric failed on batch: %s", exc)
+
+                if val_num_preview > 0 and i < val_num_preview:
+                    img_path = val_data["GT_path"][0]
+                    img_name = os.path.splitext(os.path.basename(img_path))[0]
+                    preview_path = os.path.join(artifacts_dir, "{}_LQ_GT_PRED.png".format(img_name))
+                    preview_img = np.concatenate([lq_img, output, gt_img], axis=1)
+                    util.save_img(preview_img, preview_path)
+                    logger.info("Saved preview image: %s", preview_path)
+
+                idx += 1
+
+            if psnr_count > 0:
+                avg_psnr /= psnr_count
+            if ssim_count > 0:
+                avg_ssim /= ssim_count
+            if lpips_count > 0:
+                avg_lpips /= lpips_count
+            if niqe_count > 0:
+                avg_niqe /= niqe_count
+
+            logger.info(
+                "# Epoch Validation # epoch: {:d}, PSNR: {:.6f} (n={:d}), SSIM: {:.6f} (n={:d}), "
+                "LPIPS: {:.6f} (n={:d}), NIQE: {:.6f} (n={:d})".format(
+                    epoch,
+                    avg_psnr, psnr_count,
+                    avg_ssim, ssim_count,
+                    avg_lpips, lpips_count,
+                    avg_niqe, niqe_count,
+                )
+            )
+
+            if psnr_count > 0 and avg_psnr > best_psnr:
+                best_psnr = avg_psnr
+                best_iter = current_step
+                best_path = os.path.join(artifacts_dir, "best_G.pth")
+                base_model = _get_base_model(model.model)
+                torch.save(base_model.state_dict(), best_path)
+                logger.info(
+                    "Saved best model (PSNR {:.6f}) to %s at epoch %d, iter %d",
+                    best_psnr,
+                    best_path,
+                    epoch,
+                    current_step,
+                )
 
     if rank <= 0:
         logger.info("Saving the final model.")
