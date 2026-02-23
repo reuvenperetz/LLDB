@@ -1,0 +1,40 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+env/
+ENV/
+
+# PyCharm / JetBrains
+.idea/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.pytest_cache/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+*.logs
+val_image*
+
+
+reconstruction_test*/
+_volt_scripts_/
+tmp_results/mlruns/
+tmp_results/training_in_phases/
+figures_llie/*.png
+tmp_results/
+experiments/
