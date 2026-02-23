@@ -39,7 +39,8 @@ class DenoisingModel(BaseModel):
                 self.model, device_ids=[torch.cuda.current_device()]
             )
         else:
-            self.model = DataParallel(self.model)
+            if self.device.type == "cuda":
+                self.model = DataParallel(self.model)
         # print network
         # self.print_network()
         self.load()

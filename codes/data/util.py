@@ -308,7 +308,7 @@ def imresize(img, scale, antialiasing=True):
     # output: CHW RGB [0,1] w/o round
     is_numpy = False
     if isinstance(img, np.ndarray):
-        img = torch.from_numpy(img.transpose(2, 0, 1)).cuda()
+        img = torch.from_numpy(img.transpose(2, 0, 1))
         is_numpy = True
     device = img.device
     # device = torch.device("cuda")

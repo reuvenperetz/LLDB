@@ -28,7 +28,7 @@ def Fourier_filter(x, threshold, scale):
     x_freq = fft.fftshift(x_freq, dim=(-2, -1))
     
     B, C, H, W = x_freq.shape
-    mask = torch.ones((B, C, H, W)).cuda() 
+    mask = torch.ones((B, C, H, W), device=x.device)
 
     crow, ccol = H // 2, W //2
     mask[..., crow - threshold:crow + threshold, ccol - threshold:ccol + threshold] = scale

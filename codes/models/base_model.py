@@ -9,7 +9,12 @@ from torch.nn.parallel import DistributedDataParallel
 class BaseModel:
     def __init__(self, opt):
         self.opt = opt
-        self.device = torch.device("cuda" if opt["gpu_ids"] is not None else "cpu")
+        if torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        elif torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
         self.is_train = opt["is_train"]
         self.schedulers = []
         self.optimizers = []
