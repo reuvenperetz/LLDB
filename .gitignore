@@ -38,3 +38,4 @@ tmp_results/training_in_phases/
 figures_llie/*.png
 tmp_results/
 experiments/
+codes/tasks/lol-v1/log

@@ -29,7 +29,8 @@ datasets:
 
     use_shuffle: true
     n_workers: 4  # per GPU
-    batch_size: 8
+    batch_size: 2
+    max_train_images: 5
     GT_size: 128
     LR_size: 128
     use_flip: true
@@ -65,6 +66,7 @@ train:
   beta1: 0.9
   beta2: 0.99
   niter: 900000
+  epochs: 2
   warmup_iter: -1  # no warm up
   lr_steps: [300000, 500000, 600000, 750000]
   lr_gamma: 0.5
