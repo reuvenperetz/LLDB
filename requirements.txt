@@ -18,3 +18,4 @@ ema_pytorch
 IPython
 diffusers
 pyiqa
+mlflow

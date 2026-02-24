@@ -13,6 +13,9 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 # from IPython import embed
 import pyiqa
+import mlflow
+from torch.nn import DataParallel
+from torch.nn.parallel import DistributedDataParallel
 
 import options as option
 
@@ -205,6 +208,28 @@ def main():
     assert train_loader is not None
     assert val_loader is not None
 
+    #### mlflow setup (rank 0 only)
+    def _flatten_dict(d, parent_key="", sep=".", out=None):
+        if out is None:
+            out = {}
+        for k, v in d.items():
+            key = f"{parent_key}{sep}{k}" if parent_key else str(k)
+            if isinstance(v, dict):
+                _flatten_dict(v, key, sep, out)
+            else:
+                out[key] = v
+        return out
+
+    if rank <= 0:
+        mlruns_dir = os.path.abspath("mlruns")
+        mlflow.set_tracking_uri(f"file:{mlruns_dir}")
+        mlflow.set_experiment(opt["name"])
+        mlflow.start_run()
+        flat_opt = _flatten_dict(opt)
+        for k, v in flat_opt.items():
+            if isinstance(v, (str, int, float, bool)) and len(str(v)) <= 250:
+                mlflow.log_param(k, v)
+
     #### create model
     model = create_model(opt) 
     
@@ -298,6 +323,8 @@ def main():
                     if opt["use_tb_logger"] and "debug" not in opt["name"]:
                         if rank <= 0:
                             tb_logger.add_scalar(k, v, current_step)
+                    if rank <= 0:
+                        mlflow.log_metric(k, v, step=current_step)
                 if rank <= 0:
                     logger.info(message)
 
@@ -404,10 +431,11 @@ def main():
                 if val_num_preview > 0 and i < val_num_preview:
                     img_path = val_data["GT_path"][0]
                     img_name = os.path.splitext(os.path.basename(img_path))[0]
-                    preview_path = os.path.join(artifacts_dir, "{}_LQ_GT_PRED.png".format(img_name))
+                    preview_path = os.path.join(artifacts_dir, "{}_compare_{}.png".format(img_name, epoch))
                     preview_img = np.concatenate([lq_img, output, gt_img], axis=1)
                     util.save_img(preview_img, preview_path)
                     logger.info("Saved preview image: %s", preview_path)
+                    mlflow.log_artifact(preview_path, artifact_path="val_previews")
 
                 idx += 1
 
@@ -430,6 +458,10 @@ def main():
                     avg_niqe, niqe_count,
                 )
             )
+            mlflow.log_metric("val_psnr", avg_psnr, step=epoch)
+            mlflow.log_metric("val_ssim", avg_ssim, step=epoch)
+            mlflow.log_metric("val_lpips", avg_lpips, step=epoch)
+            mlflow.log_metric("val_niqe", avg_niqe, step=epoch)
 
             if psnr_count > 0 and avg_psnr > best_psnr:
                 best_psnr = avg_psnr
@@ -438,18 +470,22 @@ def main():
                 base_model = _get_base_model(model.model)
                 torch.save(base_model.state_dict(), best_path)
                 logger.info(
-                    "Saved best model (PSNR {:.6f}) to %s at epoch %d, iter %d",
+                    "Saved best model (PSNR %.6f) to %s at epoch %d, iter %d",
                     best_psnr,
                     best_path,
                     epoch,
                     current_step,
                 )
+                mlflow.log_artifact(best_path, artifact_path="models")
 
     if rank <= 0:
         logger.info("Saving the final model.")
         model.save("latest")
         logger.info("End of Predictor and Corrector training.")
     tb_logger.close()
+    if rank <= 0:
+        mlflow.log_artifacts(artifacts_dir, artifact_path="artifacts")
+        mlflow.end_run()
 
 
 if __name__ == "__main__":
