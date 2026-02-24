@@ -24,8 +24,8 @@ datasets:
   train:
     name: Train_Dataset
     mode: LQGT
-    dataroot_GT: /Users/reuper01/Downloads/lol_dataset/our485/high
-    dataroot_LQ: /Users/reuper01/Downloads/lol_dataset/our485/low
+    dataroot_GT: /tmp/ntire-llie/train/high
+    dataroot_LQ: /tmp/ntire-llie/train/low
 
     use_shuffle: true
     n_workers: 4  # per GPU
@@ -39,9 +39,8 @@ datasets:
   val:
     name: Val_Dataset
     mode: LQGT
-    dataroot_GT: /Users/reuper01/Downloads/lol_dataset/eval15/high
-    dataroot_LQ: /Users/reuper01/Downloads/lol_dataset/eval15/low
-
+    dataroot_GT: /tmp/ntire-llie/val/high
+    dataroot_LQ: /tmp/ntire-llie/val/low
 
 
 network_G:
