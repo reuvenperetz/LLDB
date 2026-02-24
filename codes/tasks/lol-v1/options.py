@@ -5,6 +5,7 @@ import sys
 import math
 
 import yaml
+from collections import OrderedDict
 
 def _ordered_yaml_fallback():
     _mapping_tag = yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG
