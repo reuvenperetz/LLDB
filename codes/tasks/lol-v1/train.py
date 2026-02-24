@@ -5,6 +5,7 @@ import os
 import random
 import sys
 import copy
+import time
 
 import cv2
 import numpy as np
@@ -293,6 +294,8 @@ def main():
 
     def _get_base_model(net):
         return net.module if isinstance(net, (DataParallel, DistributedDataParallel)) else net
+    last_log_time = time.time()
+    last_log_iter = 0
 
     for epoch in range(start_epoch, total_epochs + 1):
         if opt["dist"]:
@@ -325,6 +328,26 @@ def main():
                             tb_logger.add_scalar(k, v, current_step)
                     if rank <= 0:
                         mlflow.log_metric(k, v, step=current_step)
+                if rank <= 0:
+                    now = time.time()
+                    elapsed = max(now - last_log_time, 1e-6)
+                    iters = max(current_step - last_log_iter, 1)
+                    time_per_iter = elapsed / iters
+                    samples_per_sec = (iters * train_loader.batch_size) / elapsed
+                    lr = model.get_current_learning_rate()
+                    mlflow.log_metric("lr", lr, step=current_step)
+                    mlflow.log_metric("time_per_iter_sec", time_per_iter, step=current_step)
+                    mlflow.log_metric("samples_per_sec", samples_per_sec, step=current_step)
+                    mlflow.log_metric("epoch", epoch, step=current_step)
+                    if torch.cuda.is_available():
+                        mlflow.log_metric(
+                            "gpu_mem_alloc_mb",
+                            torch.cuda.max_memory_allocated() / (1024 * 1024),
+                            step=current_step,
+                        )
+                        torch.cuda.reset_peak_memory_stats()
+                    last_log_time = now
+                    last_log_iter = current_step
                 if rank <= 0:
                     logger.info(message)
 
