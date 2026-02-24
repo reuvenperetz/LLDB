@@ -6,13 +6,25 @@ import math
 
 import yaml
 
+def _ordered_yaml_fallback():
+    _mapping_tag = yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG
+
+    def dict_representer(dumper, data):
+        return dumper.represent_dict(data.items())
+
+    def dict_constructor(loader, node):
+        return OrderedDict(loader.construct_pairs(node))
+
+    yaml.add_representer(OrderedDict, dict_representer)
+    yaml.add_constructor(_mapping_tag, dict_constructor)
+    return yaml.SafeLoader, yaml.SafeDumper
+
 try:
     sys.path.append("../../")
     from utils import OrderedYaml
-except ImportError:
-    pass
-
-Loader, Dumper = OrderedYaml()
+    Loader, Dumper = OrderedYaml()
+except Exception:
+    Loader, Dumper = _ordered_yaml_fallback()
 
 
 def parse(opt_path, is_train=True):
