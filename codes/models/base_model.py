@@ -9,12 +9,27 @@ from torch.nn.parallel import DistributedDataParallel
 class BaseModel:
     def __init__(self, opt):
         self.opt = opt
+        cuda_available = torch.cuda.is_available()
+        cuda_count = torch.cuda.device_count()
+        cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", None)
         if torch.backends.mps.is_available():
             self.device = torch.device("mps")
-        elif torch.cuda.is_available():
+        elif cuda_available:
             self.device = torch.device("cuda")
         else:
             self.device = torch.device("cpu")
+        # Debug device selection early
+        print(
+            "[device-debug] BaseModel device:",
+            self.device,
+            "| cuda_available:",
+            cuda_available,
+            "| cuda_count:",
+            cuda_count,
+            "| CUDA_VISIBLE_DEVICES:",
+            cuda_visible,
+            flush=True,
+        )
         self.is_train = opt["is_train"]
         self.schedulers = []
         self.optimizers = []

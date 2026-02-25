@@ -43,6 +43,14 @@ def init_dist(backend="nccl", **kwargs):
     rank = int(os.environ["RANK"])  # system env process ranks
     num_gpus = torch.cuda.device_count()  # Returns the number of GPUs available
     torch.cuda.set_device(rank % num_gpus)
+    print(
+        "[device-debug] init_dist:",
+        "rank=", rank,
+        "num_gpus=", num_gpus,
+        "current_device=", torch.cuda.current_device(),
+        "device_name=", torch.cuda.get_device_name(torch.cuda.current_device()) if num_gpus > 0 else "n/a",
+        flush=True,
+    )
     dist.init_process_group(
         backend=backend, **kwargs
     )  # Initializes the default distributed process group
@@ -58,6 +66,15 @@ def main():
     parser.add_argument("--local_rank", type=int, default=0)
     args = parser.parse_args()
     opt = option.parse(args.opt, is_train=True)
+    print(
+        "[device-debug] startup:",
+        "launcher=", args.launcher,
+        "local_rank=", args.local_rank,
+        "cuda_available=", torch.cuda.is_available(),
+        "cuda_count=", torch.cuda.device_count(),
+        "CUDA_VISIBLE_DEVICES=", os.environ.get("CUDA_VISIBLE_DEVICES"),
+        flush=True,
+    )
 
     # convert to NoneDict, which returns None for missing keys
     opt = option.dict_to_nonedict(opt)
@@ -235,6 +252,17 @@ def main():
 
     #### create model
     model = create_model(opt) 
+    try:
+        device = model.device
+    except Exception:
+        device = "unknown"
+    print(
+        "[device-debug] model:",
+        "model_device=", device,
+        "torch_current_device=", torch.cuda.current_device() if torch.cuda.is_available() else "n/a",
+        "torch_device_name=", torch.cuda.get_device_name(torch.cuda.current_device()) if torch.cuda.is_available() else "n/a",
+        flush=True,
+    )
     
     print(model)
     device = model.device
