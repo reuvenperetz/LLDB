@@ -28,7 +28,7 @@ datasets:
     dataroot_LQ: /tmp/ntire-llie/train/low
 
     use_shuffle: true
-    n_workers: 4  # per GPU
+    n_workers: 1  # per GPU
     batch_size: 8
     max_train_images: 5
     GT_size: 128
