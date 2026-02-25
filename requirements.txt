@@ -19,3 +19,8 @@ IPython
 diffusers==0.30
 pyiqa
 mlflow
+boto3
+botocore
+optuna
+pytorch-msssim
+

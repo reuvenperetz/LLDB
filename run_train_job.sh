@@ -3,7 +3,7 @@ set -euo pipefail
 
 
 REPO_URL="https://github.com/reuvenperetz/LLDB.git"
-DOCKER_IMAGE="577004484676.dkr.ecr.us-east-1.amazonaws.com/volt-dev:elir_isp_v3"
+DOCKER_IMAGE="577004484676.dkr.ecr.us-east-1.amazonaws.com/volt-dev:lldbv2"
 NUM_GPUS="1"
 GPU_TYPE="H100"
 JOB_NAME="${JOB_NAME:-lldb-$(date +%m%d-%H%M)}"
@@ -15,10 +15,6 @@ cat > "$TMP_SCRIPT" <<'JOB'
 set -euo pipefail
 
 DEBUG_MODE=0
-
-pip install --upgrade pip
-pip install boto3 botocore optuna pytorch-msssim
-pip install -r /dev/shm/LLDB/requirements.txt
 
 
 cd /tmp
@@ -33,7 +29,6 @@ mkdir /tmp/ntire-llie/val/low
 # Download dataset
 aws s3 cp s3://$S3_BUCKET/ntire-llie/Denoised_LLIE_val_gt.zip .
 aws s3 cp s3://$S3_BUCKET/ntire-llie/Denoised_LLIE_val_in.zip .
-
 
 # Unzip datasets
 unzip Denoised_LLIE_val_gt.zip -d /tmp/ntire-llie/val/high
@@ -74,7 +69,6 @@ cd /dev/shm/LLDB/
 git checkout ntire
 
 export PYTHONPATH="/dev/shm/LLDB"
-
 python /dev/shm/LLDB/codes/tasks/lol-v1/train.py -opt=/dev/shm/LLDB/codes/tasks/lol-v1/options/train.yml
 
 
