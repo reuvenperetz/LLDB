@@ -3,7 +3,7 @@ name: goub
 use_tb_logger: true
 model: denoising
 distortion: derain
-gpu_ids: [1]
+gpu_ids: [0]
 
 sde:
   lambda_square: 30
