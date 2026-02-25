@@ -16,6 +16,6 @@ gradio
 tensorboard
 ema_pytorch
 IPython
-diffusers
+diffusers==0.30
 pyiqa
 mlflow
