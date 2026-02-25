@@ -29,7 +29,7 @@ datasets:
 
     use_shuffle: true
     n_workers: 4  # per GPU
-    batch_size: 2
+    batch_size: 7
     max_train_images: 5
     GT_size: 128
     LR_size: 128
