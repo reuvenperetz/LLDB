@@ -24,8 +24,8 @@ datasets:
   train:
     name: Train_Dataset
     mode: LQGT
-    dataroot_GT: /tmp/ntire-llie/train/high
-    dataroot_LQ: /tmp/ntire-llie/train/low
+    dataroot_GT: /tmp/ntire-llie/train-debug/high
+    dataroot_LQ: /tmp/ntire-llie/train-debug/low
 
     use_shuffle: true
     n_workers: 4  # per GPU
