@@ -23,4 +23,4 @@ boto3
 botocore
 optuna
 pytorch-msssim
-
+pytorch-lightning==2.2.2

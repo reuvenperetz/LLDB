@@ -40,7 +40,6 @@ The Test results will be saved in `\results`.
 # Train
 1. Prepare datasets.
 2. Modify options, including dataroot_GT, dataroot_LQ.
-3. `python train.py -opt=options/train.yml` for single GPU.<br> `python -m torch.distributed.launch --nproc_per_node=2 --master_port=1111 train.py -opt=options/train.yml --launcher pytorch` for multi GPUs. *Attention: see [Important Option Details](#important-option-details)*.
+3. `python train.py -opt=options/train.yml` for single GPU.<br> `python train.py -opt=options/train.yml --devices 8` for multi GPUs (PyTorch Lightning DDP). *Attention: see [Important Option Details](#important-option-details)*.
 
 The Training log will be saved in `\experiments`.
-
