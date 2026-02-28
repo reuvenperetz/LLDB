@@ -20,6 +20,11 @@ class LLDBDataModule(pl.LightningDataModule):
     def setup(self, stage: Optional[str] = None) -> None:
         if stage in (None, "fit"):
             self._train_set = create_dataset(self.train_opt)
+            max_train_images = self.train_opt.get("max_train_images")
+            if max_train_images is not None:
+                self._train_set = data.Subset(
+                    self._train_set, list(range(min(len(self._train_set), max_train_images)))
+                )
             if self.val_opt is not None:
                 self._val_set = create_dataset(self.val_opt)
 

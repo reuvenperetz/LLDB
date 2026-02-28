@@ -128,6 +128,9 @@ def run(opt: Dict[str, Any], num_devices: Optional[int] = None) -> None:
 
     if val_check_interval is not None:
         train_set = create_dataset(opt["datasets"]["train"])
+        max_train_images = opt["datasets"]["train"].get("max_train_images")
+        if max_train_images is not None:
+            train_set = list(range(min(len(train_set), max_train_images)))
         batch_size = opt["datasets"]["train"]["batch_size"]
         world_size = int(os.environ.get("WORLD_SIZE", "1"))
         if world_size > 1:
@@ -142,8 +145,8 @@ def run(opt: Dict[str, Any], num_devices: Optional[int] = None) -> None:
                 f"[warn] val_freq ({val_check_interval}) > train_batches ({train_batches}); "
                 "falling back to once-per-epoch validation."
             )
-            val_check_interval = 1.0
-            check_val_every_n_epoch = None
+            val_check_interval = None
+            check_val_every_n_epoch = 1
         else:
             check_val_every_n_epoch = None
 
@@ -152,7 +155,11 @@ def run(opt: Dict[str, Any], num_devices: Optional[int] = None) -> None:
     trainer = pl.Trainer(
         accelerator=accelerator,
         devices=num_devices,
-        strategy="ddp" if (num_devices and num_devices > 1) else "auto",
+        strategy=(
+            "ddp_find_unused_parameters_true"
+            if (num_devices and num_devices > 1)
+            else "auto"
+        ),
         max_steps=max_steps,
         max_epochs=max_epochs,
         logger=logger,
