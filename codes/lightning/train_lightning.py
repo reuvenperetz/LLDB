@@ -8,6 +8,10 @@ import torch
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, Callback
 from pytorch_lightning.loggers import TensorBoardLogger
+try:
+    from pytorch_lightning.loggers import MLFlowLogger
+except Exception:
+    MLFlowLogger = None
 
 import utils as util
 
@@ -58,6 +62,50 @@ class LatestPTHCheckpoint(Callback):
         torch.save(pl_module.ema.ema_model.state_dict(), ema_path)
 
 
+class MLFlowArtifactsCallback(Callback):
+    def __init__(self, val_images_dir: str, models_dir: str) -> None:
+        super().__init__()
+        self.val_images_dir = val_images_dir
+        self.models_dir = models_dir
+
+    def _get_mlflow_logger(self, trainer):
+        if MLFlowLogger is None:
+            return None
+        loggers = getattr(trainer, "loggers", None)
+        if not loggers:
+            single_logger = getattr(trainer, "logger", None)
+            loggers = [single_logger] if single_logger else []
+        for logger in loggers:
+            if isinstance(logger, MLFlowLogger):
+                return logger
+        return None
+
+    def on_validation_epoch_end(self, trainer, pl_module) -> None:
+        if trainer.global_rank != 0:
+            return
+        mlflow_logger = self._get_mlflow_logger(trainer)
+        if mlflow_logger is None:
+            return
+        try:
+            client = mlflow_logger.experiment
+            run_id = mlflow_logger.run_id
+            epoch_tag = f"epoch_{trainer.current_epoch}"
+            if os.path.isdir(self.val_images_dir):
+                client.log_artifacts(
+                    run_id,
+                    self.val_images_dir,
+                    artifact_path=os.path.join("val_images", epoch_tag),
+                )
+            if os.path.isdir(self.models_dir):
+                client.log_artifacts(
+                    run_id,
+                    self.models_dir,
+                    artifact_path=os.path.join("models", epoch_tag),
+                )
+        except Exception:
+            pass
+
+
 def run(opt: Dict[str, Any], num_devices: Optional[int] = None) -> None:
     resume_state = opt["path"].get("resume_state", None)
     rank = int(os.environ.get("LOCAL_RANK", os.environ.get("RANK", "0")))
@@ -84,9 +132,27 @@ def run(opt: Dict[str, Any], num_devices: Optional[int] = None) -> None:
         os.makedirs(opt["path"]["val_images"], exist_ok=True)
 
     use_tb = opt.get("use_tb_logger", False)
-    logger = None
+    loggers = []
     if use_tb:
-        logger = TensorBoardLogger(save_dir="log", name=opt["name"])
+        loggers.append(TensorBoardLogger(save_dir="log", name=opt["name"]))
+    mlflow_tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
+    if MLFlowLogger is not None and mlflow_tracking_uri:
+        mlflow_experiment = os.environ.get("MLFLOW_EXPERIMENT", opt.get("name", "lldb"))
+        mlflow_run_name = os.environ.get("JOB_NAME")
+        loggers.append(
+            MLFlowLogger(
+                experiment_name=mlflow_experiment,
+                tracking_uri=mlflow_tracking_uri,
+                run_name=mlflow_run_name,
+                log_model=True,
+            )
+        )
+    if len(loggers) == 1:
+        logger = loggers[0]
+    elif len(loggers) > 1:
+        logger = loggers
+    else:
+        logger = None
 
     callbacks = []
 
@@ -105,6 +171,13 @@ def run(opt: Dict[str, Any], num_devices: Optional[int] = None) -> None:
         save_last=True,
     )
     callbacks.append(checkpoint_cb)
+    if mlflow_tracking_uri:
+        callbacks.append(
+            MLFlowArtifactsCallback(
+                opt["path"]["val_images"],
+                opt["path"]["models"],
+            )
+        )
 
     train_opt = opt["train"]
     max_steps = train_opt.get("niter")
