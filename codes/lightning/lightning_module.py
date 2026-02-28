@@ -30,6 +30,8 @@ class LLDBLightningModule(pl.LightningModule):
 
         self._val_preview_paths: List[str] = []
         self._val_num_preview = int(self.train_opt.get("val_num_preview", 2))
+        if self._val_num_preview <= 0:
+            self._val_num_preview = 0
         if self._val_num_preview > 2:
             self._val_num_preview = 2
         self._val_image_freq = int(
@@ -108,7 +110,7 @@ class LLDBLightningModule(pl.LightningModule):
             "train/loss",
             loss,
             on_step=True,
-            on_epoch=False,
+            on_epoch=True,
             prog_bar=True,
             sync_dist=True,
         )

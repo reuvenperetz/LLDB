@@ -93,18 +93,23 @@ class MLFlowArtifactsCallback(Callback):
             client = mlflow_logger.experiment
             run_id = mlflow_logger.run_id
             epoch_tag = f"epoch_{trainer.current_epoch}"
-            if os.path.isdir(self.val_images_dir):
-                client.log_artifacts(
-                    run_id,
-                    self.val_images_dir,
-                    artifact_path=os.path.join("val_images", epoch_tag),
-                )
-            if os.path.isdir(self.models_dir):
-                client.log_artifacts(
-                    run_id,
-                    self.models_dir,
-                    artifact_path=os.path.join("models", epoch_tag),
-                )
+            preview_paths = getattr(pl_module, "_val_preview_paths", [])
+            for preview_path in preview_paths:
+                if os.path.isfile(preview_path):
+                    client.log_artifact(
+                        run_id,
+                        preview_path,
+                        artifact_path=os.path.join("val_images", epoch_tag),
+                    )
+            checkpoint_cb = getattr(trainer, "checkpoint_callback", None)
+            if checkpoint_cb is not None:
+                best_path = getattr(checkpoint_cb, "best_model_path", None)
+                if best_path and os.path.isfile(best_path):
+                    client.log_artifact(
+                        run_id,
+                        best_path,
+                        artifact_path="models",
+                    )
         except Exception:
             pass
 
