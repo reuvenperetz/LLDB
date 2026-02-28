@@ -34,7 +34,12 @@ RUN curl -sS https://bootstrap.pypa.io/pip/3.8/get-pip.py | python \
 # ---- Install your repo dependencies ----
 # Copy only requirements first to leverage Docker layer caching
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install -r /tmp/requirements.txt
+# Install non-torch deps first (torch/torchvision are pinned to older CUDA)
+RUN grep -vE '^(torch|torchvision)==' /tmp/requirements.txt > /tmp/requirements.no_torch.txt \
+    && pip install -r /tmp/requirements.no_torch.txt \
+    && pip install --index-url https://download.pytorch.org/whl/cu121 \
+        torch==2.2.2+cu121 \
+        torchvision==0.17.2+cu121
 
 
 # ---- Workspace ----

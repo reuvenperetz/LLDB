@@ -58,8 +58,15 @@ class LatestPTHCheckpoint(Callback):
 
 def run(opt: Dict[str, Any], num_devices: Optional[int] = None) -> None:
     resume_state = opt["path"].get("resume_state", None)
-    if resume_state is None:
-        util.mkdir_and_rename(opt["path"]["experiments_root"])
+    rank = int(os.environ.get("LOCAL_RANK", os.environ.get("RANK", "0")))
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+
+    if resume_state is None and (world_size <= 1 or rank == 0):
+        if os.environ.get("LLDB_SKIP_RENAME", "0") != "1":
+            try:
+                util.mkdir_and_rename(opt["path"]["experiments_root"])
+            except OSError:
+                pass
         util.mkdirs(
             (
                 path
