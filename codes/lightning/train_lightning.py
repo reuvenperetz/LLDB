@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 from typing import Any, Dict, Optional
+import math
 
 import torch
 import pytorch_lightning as pl
@@ -12,6 +13,7 @@ import utils as util
 
 from lightning.lightning_module import LLDBLightningModule
 from lightning.lightning_data import LLDBDataModule
+from data import create_dataset
 
 
 class PeriodicPTHCheckpoint(Callback):
@@ -123,6 +125,27 @@ def run(opt: Dict[str, Any], num_devices: Optional[int] = None) -> None:
                 val_check_interval = None
         except Exception:
             val_check_interval = None
+
+    if val_check_interval is not None:
+        train_set = create_dataset(opt["datasets"]["train"])
+        batch_size = opt["datasets"]["train"]["batch_size"]
+        world_size = int(os.environ.get("WORLD_SIZE", "1"))
+        if world_size > 1:
+            if batch_size % world_size != 0:
+                raise ValueError(
+                    f"batch_size ({batch_size}) must be divisible by world_size ({world_size})"
+                )
+            batch_size = batch_size // world_size
+        train_batches = int(math.ceil(len(train_set) / batch_size))
+        if val_check_interval > train_batches:
+            print(
+                f"[warn] val_freq ({val_check_interval}) > train_batches ({train_batches}); "
+                "falling back to once-per-epoch validation."
+            )
+            val_check_interval = 1.0
+            check_val_every_n_epoch = None
+        else:
+            check_val_every_n_epoch = None
 
     accelerator = "gpu" if torch.cuda.is_available() else "cpu"
 

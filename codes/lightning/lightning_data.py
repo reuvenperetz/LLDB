@@ -2,6 +2,7 @@ from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
 import torch.utils.data as data
+import torch.distributed as dist
 
 from data import create_dataset
 
@@ -24,6 +25,13 @@ class LLDBDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         batch_size = self.train_opt["batch_size"]
+        if dist.is_available() and dist.is_initialized():
+            world_size = dist.get_world_size()
+            if batch_size % world_size != 0:
+                raise ValueError(
+                    f"batch_size ({batch_size}) must be divisible by world_size ({world_size})"
+                )
+            batch_size = batch_size // world_size
         num_workers = self.train_opt.get("n_workers", 4)
         return data.DataLoader(
             self._train_set,
