@@ -13,9 +13,11 @@ class LLDBDataModule(pl.LightningDataModule):
         self.opt = opt
         self.train_opt = opt["datasets"]["train"]
         self.val_opt = opt["datasets"].get("val")
+        self.test_opt = opt["datasets"].get("test")
 
         self._train_set = None
         self._val_set = None
+        self._test_set = None
 
     def setup(self, stage: Optional[str] = None) -> None:
         if stage in (None, "fit"):
@@ -27,6 +29,9 @@ class LLDBDataModule(pl.LightningDataModule):
                 )
             if self.val_opt is not None:
                 self._val_set = create_dataset(self.val_opt)
+        if stage in (None, "test"):
+            if self.test_opt is not None:
+                self._test_set = create_dataset(self.test_opt)
 
     def train_dataloader(self):
         batch_size = self.train_opt["batch_size"]
@@ -53,6 +58,18 @@ class LLDBDataModule(pl.LightningDataModule):
         num_workers = self.val_opt.get("n_workers", 0)
         return data.DataLoader(
             self._val_set,
+            batch_size=1,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True,
+        )
+
+    def test_dataloader(self):
+        if self._test_set is None:
+            return None
+        num_workers = self.test_opt.get("n_workers", 0)
+        return data.DataLoader(
+            self._test_set,
             batch_size=1,
             shuffle=False,
             num_workers=num_workers,

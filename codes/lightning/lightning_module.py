@@ -29,7 +29,17 @@ class LLDBLightningModule(pl.LightningModule):
         self.sde = None
 
         self._val_preview_paths: List[str] = []
-        self._val_num_preview = int(self.train_opt.get("val_num_preview", 0))
+        self._val_num_preview = int(self.train_opt.get("val_num_preview", 2))
+        if self._val_num_preview > 2:
+            self._val_num_preview = 2
+        self._val_image_freq = int(
+            self.train_opt.get(
+                "val_image_freq",
+                self.train_opt.get("val_epoch_freq", 1),
+            )
+        )
+        if self._val_image_freq <= 0:
+            self._val_image_freq = 1
 
         self._psnr_fn = None
         self._ssim_fn = None
@@ -144,7 +154,11 @@ class LLDBLightningModule(pl.LightningModule):
         for k, v in metrics.items():
             self.log(k, v, on_step=False, on_epoch=True, prog_bar=(k == "val/psnr"), sync_dist=True)
 
-        if self._val_num_preview > 0 and len(self._val_preview_paths) < self._val_num_preview:
+        if (
+            self._val_num_preview > 0
+            and self.current_epoch % self._val_image_freq == 0
+            and len(self._val_preview_paths) < self._val_num_preview
+        ):
             img_path = batch["GT_path"][0]
             img_name = os.path.splitext(os.path.basename(img_path))[0]
             preview_path = os.path.join(self.opt["path"]["val_images"], "artifacts", f"{img_name}_compare_{self.current_epoch}.png")
@@ -159,6 +173,34 @@ class LLDBLightningModule(pl.LightningModule):
 
             os.makedirs(os.path.dirname(preview_path), exist_ok=True)
             util.save_img(preview_img, preview_path)
+
+        return metrics
+
+    def test_step(self, batch, batch_idx):
+        LQ, GT = batch["LQ"].to(self.device), batch["GT"].to(self.device)
+
+        self.sde.set_mu(LQ)
+        with torch.no_grad():
+            output = self.sde.reverse_mean_ode(LQ)
+
+        sr = output.clamp(0, 1)
+        gt = GT.clamp(0, 1)
+
+        sr = sr.detach()
+        gt = gt.detach()
+
+        metrics = {}
+        if self._psnr_fn is not None:
+            metrics["test/psnr"] = self._psnr_fn(sr, gt).mean()
+        if self._ssim_fn is not None:
+            metrics["test/ssim"] = self._ssim_fn(sr, gt).mean()
+        if self._lpips_fn is not None:
+            metrics["test/lpips"] = self._lpips_fn(sr, gt).mean()
+        if self._niqe_fn is not None:
+            metrics["test/niqe"] = self._niqe_fn(sr).mean()
+
+        for k, v in metrics.items():
+            self.log(k, v, on_step=False, on_epoch=True, prog_bar=False, sync_dist=True)
 
         return metrics
 

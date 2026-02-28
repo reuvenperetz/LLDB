@@ -63,10 +63,11 @@ class LatestPTHCheckpoint(Callback):
 
 
 class MLFlowArtifactsCallback(Callback):
-    def __init__(self, val_images_dir: str, models_dir: str) -> None:
+    def __init__(self, val_images_dir: str, models_dir: str, val_image_freq: int) -> None:
         super().__init__()
         self.val_images_dir = val_images_dir
         self.models_dir = models_dir
+        self.val_image_freq = max(int(val_image_freq), 1)
 
     def _get_mlflow_logger(self, trainer):
         if MLFlowLogger is None:
@@ -82,6 +83,8 @@ class MLFlowArtifactsCallback(Callback):
 
     def on_validation_epoch_end(self, trainer, pl_module) -> None:
         if trainer.global_rank != 0:
+            return
+        if trainer.current_epoch % self.val_image_freq != 0:
             return
         mlflow_logger = self._get_mlflow_logger(trainer)
         if mlflow_logger is None:
@@ -156,30 +159,32 @@ def run(opt: Dict[str, Any], num_devices: Optional[int] = None) -> None:
 
     callbacks = []
 
-    save_freq = int(opt["logger"].get("save_checkpoint_freq", 0))
-    if save_freq > 0:
-        callbacks.append(PeriodicPTHCheckpoint(opt["path"]["models"], save_freq))
-
-    callbacks.append(LatestPTHCheckpoint(opt["path"]["models"]))
+    train_opt = opt["train"]
 
     checkpoint_cb = ModelCheckpoint(
         dirpath=opt["path"]["models"],
-        filename="{epoch}-{step}-{val/psnr:.4f}",
+        filename="best",
         monitor="val/psnr",
         mode="max",
         save_top_k=1,
-        save_last=True,
+        save_last=False,
     )
     callbacks.append(checkpoint_cb)
     if mlflow_tracking_uri:
+        val_image_freq = int(
+            train_opt.get(
+                "val_image_freq",
+                train_opt.get("val_epoch_freq", 1),
+            )
+        )
         callbacks.append(
             MLFlowArtifactsCallback(
                 opt["path"]["val_images"],
                 opt["path"]["models"],
+                val_image_freq,
             )
         )
 
-    train_opt = opt["train"]
     max_steps = train_opt.get("niter")
     max_epochs = train_opt.get("epochs")
     if max_steps is None:
@@ -249,6 +254,9 @@ def run(opt: Dict[str, Any], num_devices: Optional[int] = None) -> None:
     module = LLDBLightningModule(opt)
 
     trainer.fit(module, datamodule=data_module)
+
+    if opt.get("datasets", {}).get("test") is not None:
+        trainer.test(module, datamodule=data_module)
 
 
 def main():
